@@ -26,7 +26,7 @@ class AutoEncoder(nn.Module):
 		self.encoder = nn.Sequential(
             nn.Linear(input_size, 512),
 			nn.ReLU(True),
-			nn.Linear(512, 128),
+			nn.Linear(512,128),
 			nn.ReLU(True),
 			nn.Linear(128, 10))
 # 			nn.Linear(input_size, 500),
