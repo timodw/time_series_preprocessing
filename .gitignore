@@ -2,3 +2,11 @@
 .ipynb_checkpoints
 __pycache__
 datasets
+data
+log.csv
+models
+own_plots
+plots
+saves
+logs
+results
