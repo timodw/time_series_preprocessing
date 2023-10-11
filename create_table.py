@@ -1,17 +1,16 @@
 table = """
-Raw	13,43%	33,02%	37,12%	19,90%
-Standardized	12,15%	32,51%	36,07%	18,78%
-Normalized	11,66%	32,13%	35,74%	18,15%
-Peak segmented	13,85%	33,41%	37,43%	20,27%
-Moving average smoothing (50)	39,64%	49,89%	57,32%	41,65%
-Resampled (50)	19,98%	37,61%	40,10%	24,86%
-Resampled (25)	20,71%	42,42%	42,09%	27,15%
-PCA (25)	17,01%	36,04%	39,64%	23,45%
-FFT filter (10)	14,05%	40,79%	37,70%	20,39%
-FFT	44,36%	51,83%	67,67%	49,93%
+Raw	28,61%	7,16%	25,00%	9,73%
+Standardized	45,05%	43,80%	59,50%	41,59%
+Normalized	30,69%	8,73%	26,11%	11,35%
+Peak segmented	26,23%	6,56%	25,00%	8,99%
+Moving average smoothing (50)	17,13%	4,22%	25,00%	6,64%
+Resampled (50)	28,31%	7,69%	25,76%	10,39%
+Resampled (25)	25,55%	10,66%	25,18%	9,18%
+PCA (25)	28,61%	7,16%	25,00%	9,73%
+FFT filter (10)	27,24%	7,04%	25,68%	9,75%
+FFT	82,92%	78,33%	86,01%	77,66%
 """
 
-learning_method = 'Unsupervised'
 model = 'DEC (GMM)'
 
 
@@ -25,7 +24,7 @@ if __name__ == "__main__":
         recall = float(l[3][:-1].replace(',', '.')) 
         f1 = float(l[4][:-1].replace(',', '.'))
         if i > 0:
-            print(f"& & \\textbf{{{method}}} & ${acc:.2f}\\%$ & ${prec:.2f}\\%$ & ${recall:.2f}\\%$ & ${f1:.2f}\\%$ \\\\")
+            print(f"& \\textbf{{{method}}} & ${acc:.2f}\\%$ & ${prec:.2f}\\%$ & ${recall:.2f}\\%$ & ${f1:.2f}\\%$ \\\\")
         else:
-            print(f"\\multirow{{{len(lines)}}}{{*}}{{\\textbf{{{learning_method}}}}} & \\multirow{{{len(lines)}}}{{*}}{{\\textbf{{{model}}}}} & \\textbf{{{method}}} & ${acc:.2f}\\%$ & ${prec:.2f}\\%$ & ${recall:.2f}\\%$ & ${f1:.2f}\\%$ \\\\")
+            print(f"\\multirow{{{len(lines)}}}{{*}}{{\\textbf{{{model}}}}} & \\textbf{{{method}}} & ${acc:.2f}\\%$ & ${prec:.2f}\\%$ & ${recall:.2f}\\%$ & ${f1:.2f}\\%$ \\\\")
 
