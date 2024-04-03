@@ -131,7 +131,7 @@ def get_horse_dataframes(root_folder: Path, horses_of_interest: List[str]) -> Di
 if __name__ == '__main__':
     root_folder = Path('/home/timodw/IDLab/time_series_preprocessing/datasets/HorsingAround/data/csv')
     movements_of_interest = ['standing', 'walking', 'trotting', 'galloping']
-    preprocessing_methods = [#'raw', 'standardized', 'normalized', 'peak_segmented', 'smoothed',
+    preprocessing_methods = ['raw', 'standardized', 'normalized', 'peak_segmented', 'smoothed',
                              'resampled_25', 'resampled_50', 'pca', 'dft_filter', 'dft']
 
     activity_distribution = get_activity_distribution(root_folder, movements_of_interest)
