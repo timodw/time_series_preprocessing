@@ -9,5 +9,6 @@ own_plots
 plots
 saves
 logs
-logs
+processed_data
+.vscode
 results
