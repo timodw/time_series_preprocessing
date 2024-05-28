@@ -23,7 +23,7 @@ DATA_ROOT = Path('/home/timodw/IDLab/time_series_preprocessing/processed_data')
 DATASET_ID = 'RTAGXFQJ4T' # With FFT
 
 
-def train_autoencoder(config, verbose=False):
+def train_autoencoder(config, verbose=False, ray_tune=True):
     X_train, _, X_val, _ = get_training_and_validation_data(DATA_ROOT, DATASET_ID)
 
     X_mean, X_std = X_train.mean(), X_train.std()
@@ -52,7 +52,10 @@ def train_autoencoder(config, verbose=False):
     criterion = torch.nn.MSELoss()
     optimizer = torch.optim.Adam(autoencoder.parameters(), lr=config['lr'])
 
-    checkpoint = ray.train.get_checkpoint()
+    if ray_tune:
+        checkpoint = ray.train.get_checkpoint()
+    else:
+        checkpoint = None
     if checkpoint:
         with checkpoint.as_directory() as checkpoint_dir:
             checkpoint_dict = torch.load(os.path.join(checkpoint_dir, 'checkpoint.pt'))
@@ -91,15 +94,16 @@ def train_autoencoder(config, verbose=False):
         val_time = time.time() - start_time
         val_loss /= len(val_loader.dataset)
 
-        checkpoint_data = {
-            'epoch': epoch,
-            'model_state_dict': autoencoder.state_dict(),
-            'optimizer_state_dict': optimizer.state_dict()
-        }
+        if ray_tune:
+            checkpoint_data = {
+                'epoch': epoch,
+                'model_state_dict': autoencoder.state_dict(),
+                'optimizer_state_dict': optimizer.state_dict()
+            }
 
-        with tempfile.TemporaryDirectory() as tempdir:
-                torch.save(checkpoint_data, os.path.join(tempdir, 'checkpoint.pt'))
-                ray.train.report({'loss': val_loss}, checkpoint=Checkpoint.from_directory(tempdir))
+            with tempfile.TemporaryDirectory() as tempdir:
+                    torch.save(checkpoint_data, os.path.join(tempdir, 'checkpoint.pt'))
+                    ray.train.report({'loss': val_loss}, checkpoint=Checkpoint.from_directory(tempdir))
 
         if verbose:
             print(f"Epoch {epoch}/{NUM_EPOCHS}")
@@ -109,45 +113,45 @@ def train_autoencoder(config, verbose=False):
 
 
 if __name__ == '__main__':
-    # config = {
-    #     'l1': 128,
-    #     'l2': 256,
-    #     'latent_dim': 64,
-    #     'activation': 'lrelu',
-    #     'latent_activation': 'tanh',
-    #     'negative_slope': 0.01,
-    #     'batch_size': 512,
-    #     'lr': 1E-3
-    # }
-
-    # train_autoencoder(config)
-
-    search_space = {
-        "l1": tune.choice([64, 128, 256]),
-        "l2": tune.choice([32, 64, 128]),
-        "latent_dim": tune.choice([16, 32, 64]),
-        "activation": tune.choice(["lrelu", "relu", "sigmoid", "tanh", "linear"]),
-        "latent_activation": tune.choice(["lrelu", "relu", "sigmoid", "tanh", "linear"]),
-        "negative_slope": tune.uniform(0.01, 0.1),
-        "batch_size": tune.choice([16, 32, 64]),
-        "lr": tune.loguniform(1e-4, 1e-2)
+    config = {
+        'l1': 256,
+        'l2': 128,
+        'latent_dim': 64,
+        'activation': 'lrelu',
+        'latent_activation': 'lrelu',
+        'negative_slope': 0.025,
+        'batch_size': 32,
+        'lr': 1E-4
     }
 
-    scheduler = ASHAScheduler(
-        metric='loss',
-        mode='min',
-        max_t=50,
-        grace_period=1,
-        reduction_factor=2
-    )
+    train_autoencoder(config, verbose=True, ray_tune=False)
 
-    result = tune.run(
-        train_autoencoder,
-        resources_per_trial={'cpu': 4, 'gpu': 1},
-        config=search_space,
-        num_samples=50,
-        scheduler=scheduler,
-        verbose=1
-    )
+    # search_space = {
+    #     "l1": tune.choice([64, 128, 256]),
+    #     "l2": tune.choice([32, 64, 128]),
+    #     "latent_dim": tune.choice([16, 32, 64]),
+    #     "activation": tune.choice(["lrelu", "relu", "sigmoid", "tanh", "linear"]),
+    #     "latent_activation": tune.choice(["lrelu", "relu", "sigmoid", "tanh", "linear"]),
+    #     "negative_slope": tune.uniform(0.01, 0.1),
+    #     "batch_size": tune.choice([16, 32, 64]),
+    #     "lr": tune.loguniform(1e-4, 1e-2)
+    # }
 
-    print('Best configuration:', result.get_best_config(metric='loss', mode='min'))
+    # scheduler = ASHAScheduler(
+    #     metric='loss',
+    #     mode='min',
+    #     max_t=50,
+    #     grace_period=1,
+    #     reduction_factor=2
+    # )
+
+    # result = tune.run(
+    #     train_autoencoder,
+    #     resources_per_trial={'cpu': 4, 'gpu': 1},
+    #     config=search_space,
+    #     num_samples=50,
+    #     scheduler=scheduler,
+    #     verbose=1
+    # )
+
+    # print('Best configuration:', result.get_best_config(metric='loss', mode='min'))
