@@ -12,3 +12,4 @@ logs
 processed_data
 .vscode
 results
+ae.pth

@@ -237,7 +237,6 @@ def get_stratified_split(y_list: List[NDArray]) -> Tuple[List[int], List[int]]:
         if diff < min_diff:
             min_diff = diff
             best_split = (training_ids, tuple(i for i in range(len(y_list)) if i not in training_ids))
-
     return best_split
 
 
