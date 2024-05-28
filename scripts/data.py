@@ -14,7 +14,8 @@ from typing import Tuple, List, Dict, Union, Any
 from numpy.typing import NDArray
 
 N_FOLDS = 4
-DATA_PATH = Path('/home/timodw/IDLab/time_series_preprocessing/datasets/HorsingAround/data/csv')
+# DATA_PATH = Path('/home/timodw/IDLab/time_series_preprocessing/datasets/HorsingAround/data/csv')
+DATA_PATH = Path('/data/IDLab/horse_data/HorsingAround/data/csv')
 PROCESSED_DATA_PATH = Path('/home/timodw/IDLab/time_series_preprocessing/processed_data') 
 
 def process_data(df, movements_of_interest,

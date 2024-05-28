@@ -3,8 +3,10 @@ from pathlib import Path
 from collections import defaultdict
 from hashlib import sha1
 import json
-from base64 import b64encode
-
+from base64 import b32encode
+from time import time
+from sklearn.model_selection import train_test_split
+from itertools import combinations
 import numpy as np
 from numpy.fft import fft, fftfreq, ifft
 
@@ -14,9 +16,11 @@ from numpy.typing import NDArray
 
 MOVEMENTS = ('standing', 'walking', 'trotting', 'galloping')
 LABEL_MAPPING = {l: i for i, l in enumerate(MOVEMENTS)}
-DATA_ROOT = Path('datasets/HorsingAround/csv')
-SAMPLING_RATE = 200
+DATA_ROOT = Path('datasets/HorsingAround/data/csv')
+PROCESSED_DATA_ROOT = Path('processed_data')
+SAMPLING_RATE = 100
 
+USE_NORM = True
 WINDOW_SIZE = 2 * SAMPLING_RATE
 STEP_SIZE = WINDOW_SIZE // 2
 MA_WINDOW = None
@@ -148,7 +152,7 @@ def get_horse_dataframes(data_root: Path, horse_name: str) -> List[pd.DataFrame]
 
 
 def process_horse_data(dataframes: List[pd.DataFrame], movements: List[str],
-                       label_mapping: Dict[str, int],
+                       label_mapping: Dict[str, int], use_norm: bool,
                        ma_window: Optional[int], standardize: bool,
                        normalize: bool, fft_filter_cutoff: Optional[int],
                        window_size: int, step_size: int,
@@ -156,7 +160,12 @@ def process_horse_data(dataframes: List[pd.DataFrame], movements: List[str],
                        window_normalization: bool) -> Tuple[NDArray, NDArray]:
     X_windows, y_windows = [], []
     for df in dataframes:
-        X, y = df[['Ax', 'Ay', 'Az']].values, df.label.values
+        if use_norm:
+            X = df[['norm']].values
+        else:
+            X = df[['Ax', 'Ay', 'Az']].values
+        y = df.label.values
+
         if ma_window:
             X = moving_average_smoothing(X, window_size=ma_window)
         if standardize:
@@ -191,8 +200,61 @@ def process_horse_data(dataframes: List[pd.DataFrame], movements: List[str],
     return np.concatenate(X_windows), np.concatenate(y_windows)
 
 
+def load_dataset(root_folder: Path, dataset_id: str) -> Tuple[List[NDArray], List[NDArray]]:
+    X_list = []
+    y_list = []
+
+    folder_path = root_folder / dataset_id
+    for X_path in folder_path.glob('X_*.npy'):
+        horse_name = X_path.stem[2:]
+        y_path = folder_path / f'y_{horse_name}.npy'
+        X = np.load(X_path)
+        y = np.load(y_path)
+        X_list.append(X)
+        y_list.append(y)
+
+    return X_list, y_list
+
+
+def get_stratified_split(y_list: List[NDArray]) -> Tuple[List[int], List[int]]:
+    unique_movements = [i for i, _ in enumerate(MOVEMENTS)]
+    min_diff = float('inf')
+    best_split = None
+
+    def calculate_ratio(data):
+        ratio = {movement: (data == movement).sum() / len(data) for movement in unique_movements}
+        return ratio
+
+    for training_ids in combinations(range(len(y_list)), 5):
+        y_train = np.concatenate([y_list[i] for i in training_ids])
+        y_val = np.concatenate([y_list[i] for i in range(len(y_list)) if i not in training_ids])
+        
+        train_ratio = calculate_ratio(y_train)
+        val_ratio = calculate_ratio(y_val)
+        
+        diff = sum(abs(train_ratio.get(activity, 0) - val_ratio.get(activity, 0)) for activity in unique_movements)
+        
+        if diff < min_diff:
+            min_diff = diff
+            best_split = (training_ids, tuple(i for i in range(len(y_list)) if i not in training_ids))
+
+    return best_split
+
+
+def get_training_and_validation_data(data_root: Path, dataset_id: str) -> Tuple[NDArray, NDArray, NDArray, NDArray]:
+    X, y = load_dataset(data_root, dataset_id)
+    train_indices, val_indices = get_stratified_split(y)
+    X_train = np.concatenate([X[i] for i in train_indices])
+    y_train = np.concatenate([y[i] for i in train_indices])
+    X_val = np.concatenate([X[i] for i in val_indices])
+    y_val = np.concatenate([y[i] for i in val_indices])
+
+    return X_train, y_train, X_val, y_val
+
+
 if __name__ == '__main__':
     config_dict = {
+        'use_norm': USE_NORM,
         'ma_window': MA_WINDOW,
         'standardize': STANDARDIZE,
         'normalize': NORMALIZE,
@@ -203,17 +265,25 @@ if __name__ == '__main__':
         'fft_windows': FFT_WINDOWS,
         'window_normalization': WINDOW_NORMALIZATION
     }
-    config_json = json.dumps(config_dict, sort_keys=True)
-    print(b64encode(sha1(repr(config_json).encode()).digest()).decode())
-    # horses = get_horses_of_interest(DATA_ROOT, MOVEMENTS)
-    # horses_dataframes = defaultdict(list)
-    # for horse in horses:
-    #     print(horse)
-    #     dataframes = get_horse_dataframes(DATA_ROOT, horse)
-    #     X, y = process_horse_data(dataframes, movements=MOVEMENTS,
-    #                               label_mapping=LABEL_MAPPING, ma_window=None,
-    #                               standardize=False, normalize=False, fft_filter_cutoff=None,
-    #                               window_size=WINDOW_SIZE, step_size=WINDOW_SIZE // 2,
-    #                               resampling=False, fft_windows=False, window_normalization=False)
-    #     print(X.shape, y.shape)
-    # print('DONE')
+    config_json = json.dumps(config_dict, sort_keys=True, indent=4)
+    config_hash = b32encode(sha1(repr(config_json).encode()).digest()).decode()[:10]
+    output_folder = PROCESSED_DATA_ROOT / config_hash
+    output_folder.mkdir(exist_ok=True, parents=True)
+    (output_folder / 'config.json').write_text(config_json + '\n')
+
+    print(config_json)
+
+    horses = get_horses_of_interest(DATA_ROOT, MOVEMENTS)
+    horses_dataframes = defaultdict(list)
+    for horse in horses:
+        print(horse, end='', flush=True)
+        t0 = time()
+        dataframes = get_horse_dataframes(DATA_ROOT, horse)
+        X, y = process_horse_data(dataframes, movements=MOVEMENTS, label_mapping=LABEL_MAPPING,
+                                  use_norm=USE_NORM, ma_window=MA_WINDOW,
+                                  standardize=STANDARDIZE, normalize=NORMALIZE, fft_filter_cutoff=FFT_FILTER_CUTOFF,
+                                  window_size=WINDOW_SIZE, step_size=WINDOW_SIZE // 2,
+                                  resampling=RESAMPLING, fft_windows=FFT_WINDOWS, window_normalization=WINDOW_NORMALIZATION)
+        np.save(output_folder / f"X_{horse.lower()}.npy", X)
+        np.save(output_folder / f"y_{horse.lower()}.npy", y)
+        print(f"; {y.shape[0]} windows; {time() - t0:.02f}s")
