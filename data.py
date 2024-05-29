@@ -16,7 +16,7 @@ from numpy.typing import NDArray
 
 MOVEMENTS = ('standing', 'walking', 'trotting', 'galloping')
 LABEL_MAPPING = {l: i for i, l in enumerate(MOVEMENTS)}
-DATA_ROOT = Path('datasets/HorsingAround/data/csv')
+DATA_ROOT = Path('datasets/HorsingAround/csv')
 PROCESSED_DATA_ROOT = Path('processed_data')
 SAMPLING_RATE = 100
 
@@ -245,8 +245,14 @@ def get_training_and_validation_data(data_root: Path, dataset_id: str) -> Tuple[
     train_indices, val_indices = get_stratified_split(y)
     X_train = np.concatenate([X[i] for i in train_indices])
     y_train = np.concatenate([y[i] for i in train_indices])
+    indices = y_train > 0
+    X_train = X_train[indices]
+    y_train = y_train[indices] - 1
     X_val = np.concatenate([X[i] for i in val_indices])
     y_val = np.concatenate([y[i] for i in val_indices])
+    indices = y_val > 0
+    X_val = X_val[indices]
+    y_val = y_val[indices] - 1
 
     return X_train, y_train, X_val, y_val
 

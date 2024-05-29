@@ -3,6 +3,10 @@ from pathlib import Path
 import tempfile
 import os
 import numpy as np
+import argparse
+from hashlib import sha1
+import json
+from base64 import b32encode
 
 import torch
 from torch.utils.data import DataLoader, TensorDataset
@@ -15,15 +19,16 @@ from ray.tune.schedulers import ASHAScheduler
 from autoencoder import Autoencoder
 from data import get_training_and_validation_data
 
-
 DEVICE = 'cuda' if torch.cuda.is_available() else 'cpu'
-NUM_EPOCHS = 50
+NUM_EPOCHS = 200
 
-DATA_ROOT = Path('/home/timodw/IDLab/time_series_preprocessing/processed_data')
-DATASET_ID = 'RTAGXFQJ4T' # With FFT
+# DATA_ROOT = Path('/home/timodw/IDLab/time_series_preprocessing/processed_data')
+DATA_ROOT = Path('/Users/timodewaele/Developer/IDLab/time_series_preprocessing/processed_data')
+# DATASET_ID = 'RTAGXFQJ4T' # With FFT
+DATASET_ID = 'K6WZL7BWHQ' # Standard
 
 
-def train_autoencoder(config, verbose=False, ray_tune=True):
+def train_autoencoder(config, verbose=False, ray_tune=True, checkpoint_folder=None):
     X_train, _, X_val, _ = get_training_and_validation_data(DATA_ROOT, DATASET_ID)
 
     X_mean, X_std = X_train.mean(), X_train.std()
@@ -65,6 +70,7 @@ def train_autoencoder(config, verbose=False, ray_tune=True):
     else:
         start_epoch = 1
 
+    best_val_loss = float('inf')
     for epoch in range(start_epoch, NUM_EPOCHS + 1):
         # Training
         autoencoder.train()
@@ -93,6 +99,10 @@ def train_autoencoder(config, verbose=False, ray_tune=True):
                 val_loss += loss.item() * inputs.size(0)
         val_time = time.time() - start_time
         val_loss /= len(val_loader.dataset)
+        if val_loss < best_val_loss:
+            best_val_loss = val_loss
+            if checkpoint_folder:
+                torch.save(autoencoder.state_dict(), checkpoint_folder / 'ae.pth') 
 
         if ray_tune:
             checkpoint_data = {
@@ -113,45 +123,55 @@ def train_autoencoder(config, verbose=False, ray_tune=True):
 
 
 if __name__ == '__main__':
-    config = {
-        'l1': 256,
-        'l2': 128,
-        'latent_dim': 64,
-        'activation': 'lrelu',
-        'latent_activation': 'lrelu',
-        'negative_slope': 0.025,
-        'batch_size': 32,
-        'lr': 1E-4
-    }
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--tune', action='store_true')
+    args = parser.parse_args()
+    
+    if not args.tune:
+        config = {
+            'l1': 256,
+            'l2': 128,
+            'latent_dim': 16,
+            'activation': 'lrelu',
+            'latent_activation': 'lrelu',
+            'negative_slope': 0.025,
+            'batch_size': 512,
+            'lr': 1E-4
+        }
+        config_json = json.dumps({**config, 'dataset_id': DATASET_ID}, sort_keys=True, indent=4)
+        config_hash = b32encode(sha1(repr(config_json).encode()).digest()).decode()[:10]
+        output_folder = Path('models') / config_hash
+        output_folder.mkdir(exist_ok=True, parents=True)
+        (output_folder / 'config.json').write_text(config_json + '\n')
 
-    train_autoencoder(config, verbose=True, ray_tune=False)
+        train_autoencoder(config, verbose=True, ray_tune=False, checkpoint_folder=output_folder)
+    else:
+        search_space = {
+            "l1": tune.choice([64, 128, 256]),
+            "l2": tune.choice([32, 64, 128]),
+            "latent_dim": tune.choice([16, 32, 64]),
+            "activation": tune.choice(["lrelu", "relu", "sigmoid", "tanh", "linear"]),
+            "latent_activation": tune.choice(["lrelu", "relu", "sigmoid", "tanh", "linear"]),
+            "negative_slope": tune.uniform(0.01, 0.1),
+            "batch_size": tune.choice([16, 32, 64]),
+            "lr": tune.loguniform(1e-4, 1e-2)
+        }
 
-    # search_space = {
-    #     "l1": tune.choice([64, 128, 256]),
-    #     "l2": tune.choice([32, 64, 128]),
-    #     "latent_dim": tune.choice([16, 32, 64]),
-    #     "activation": tune.choice(["lrelu", "relu", "sigmoid", "tanh", "linear"]),
-    #     "latent_activation": tune.choice(["lrelu", "relu", "sigmoid", "tanh", "linear"]),
-    #     "negative_slope": tune.uniform(0.01, 0.1),
-    #     "batch_size": tune.choice([16, 32, 64]),
-    #     "lr": tune.loguniform(1e-4, 1e-2)
-    # }
+        scheduler = ASHAScheduler(
+            metric='loss',
+            mode='min',
+            max_t=50,
+            grace_period=1,
+            reduction_factor=2
+        )
 
-    # scheduler = ASHAScheduler(
-    #     metric='loss',
-    #     mode='min',
-    #     max_t=50,
-    #     grace_period=1,
-    #     reduction_factor=2
-    # )
+        result = tune.run(
+            train_autoencoder,
+            resources_per_trial={'cpu': 4, 'gpu': 1},
+            config=search_space,
+            num_samples=50,
+            scheduler=scheduler,
+            verbose=1
+        )
 
-    # result = tune.run(
-    #     train_autoencoder,
-    #     resources_per_trial={'cpu': 4, 'gpu': 1},
-    #     config=search_space,
-    #     num_samples=50,
-    #     scheduler=scheduler,
-    #     verbose=1
-    # )
-
-    # print('Best configuration:', result.get_best_config(metric='loss', mode='min'))
+        print('Best configuration:', result.get_best_config(metric='loss', mode='min'))
