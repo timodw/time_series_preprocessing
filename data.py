@@ -6,6 +6,7 @@ import json
 from base64 import b32encode
 from time import time
 from sklearn.model_selection import train_test_split
+from imblearn.under_sampling import RandomUnderSampler
 from itertools import combinations
 import numpy as np
 from numpy.fft import fft, fftfreq, ifft
@@ -240,19 +241,16 @@ def get_stratified_split(y_list: List[NDArray]) -> Tuple[List[int], List[int]]:
     return best_split
 
 
-def get_training_and_validation_data(data_root: Path, dataset_id: str) -> Tuple[NDArray, NDArray, NDArray, NDArray]:
+def get_training_and_validation_data(data_root: Path, dataset_id: str, balanced=False) -> Tuple[NDArray, NDArray, NDArray, NDArray]:
     X, y = load_dataset(data_root, dataset_id)
     train_indices, val_indices = get_stratified_split(y)
-    X_train = np.concatenate([X[i] for i in train_indices])
+    X_train = np.concatenate([X[i] for i in train_indices])[:, :, 0]
     y_train = np.concatenate([y[i] for i in train_indices])
-    indices = y_train > 0
-    X_train = X_train[indices]
-    y_train = y_train[indices] - 1
-    X_val = np.concatenate([X[i] for i in val_indices])
+    if balanced:
+        sampler = RandomUnderSampler()
+        X_train, y_train = sampler.fit_resample(X_train, y_train)
+    X_val = np.concatenate([X[i] for i in val_indices])[:, :, 0]
     y_val = np.concatenate([y[i] for i in val_indices])
-    indices = y_val > 0
-    X_val = X_val[indices]
-    y_val = y_val[indices] - 1
 
     return X_train, y_train, X_val, y_val
 
