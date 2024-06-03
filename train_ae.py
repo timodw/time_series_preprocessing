@@ -17,13 +17,13 @@ from ray import tune
 from ray.train import Checkpoint
 from ray.tune.schedulers import ASHAScheduler
 
-from autoencoder import Autoencoder, VariationalAutoencoder, CategoricalAutoencoder
+from autoencoder import Autoencoder, VariationalAutoencoder, CategoricalAutoencoder, ConvolutionalCategoricalAutoencoder
 from autoencoder import vae_loss, gumbel_elbo_loss
 from data import get_training_and_validation_data
 
 DEVICE = 'cuda' if torch.cuda.is_available() else 'cpu'
 NUM_EPOCHS = 200
-MODEL = 'cae'
+MODEL = 'convcae'
 
 DATA_ROOT = Path('/home/timodw/IDLab/time_series_preprocessing/processed_data')
 # DATA_ROOT = Path('/Users/timodewaele/Developer/IDLab/time_series_preprocessing/processed_data')
@@ -58,21 +58,16 @@ def train_autoencoder(config, verbose=False, ray_tune=True, checkpoint_folder=No
         model = VariationalAutoencoder
     elif MODEL == 'cae':
         model = CategoricalAutoencoder
+    elif MODEL == 'convcae':
+        model = ConvolutionalCategoricalAutoencoder
     else:
         model = Autoencoder
 
-    autoencoder = model(
-        input_dim=X_train.shape[1],
-        hidden_dims=[config['l1'], config['l2']],
-        latent_dim=config['latent_dim'],
-        activation=config['activation'],
-        latent_activation=config['latent_activation'],
-        negative_slope=config['negative_slope']
-    ).to(DEVICE)
+    autoencoder = model(**config).to(DEVICE)
 
     if MODEL == 'vae':
         criterion = partial(vae_loss, kl_weight=config['kl_weight'])
-    elif MODEL == 'cae':
+    elif MODEL == 'cae' or MODEL == 'convcae':
         criterion = partial(gumbel_elbo_loss, kl_weight=config['kl_weight'])
     else:
         criterion = torch.nn.MSELoss()
@@ -103,7 +98,7 @@ def train_autoencoder(config, verbose=False, ray_tune=True, checkpoint_folder=No
             if MODEL == 'vae':
                 outputs, mu, logvar = autoencoder(inputs)
                 loss = criterion(outputs, inputs, mu, logvar)
-            elif MODEL == 'cae':
+            elif MODEL == 'cae' or MODEL == 'convcae':
                 outputs, p = autoencoder(inputs)
                 loss = criterion(outputs, inputs, p)
             else:
@@ -125,7 +120,7 @@ def train_autoencoder(config, verbose=False, ray_tune=True, checkpoint_folder=No
                 if MODEL == 'vae':
                     outputs, mu, logvar = autoencoder(inputs)
                     loss = criterion(outputs, inputs, mu, logvar)
-                elif MODEL == 'cae':
+                elif MODEL == 'cae' or MODEL == 'convcae':
                     outputs, p = autoencoder(inputs)
                     loss = criterion(outputs, inputs, p)
                 else:
@@ -163,16 +158,31 @@ if __name__ == '__main__':
     args = parser.parse_args()
     
     if not args.tune:
+        # config = {
+        #     'l1': 64,
+        #     'l2': 32,
+        #     'latent_dim': 16,
+        #     'activation': 'lrelu',
+        #     'latent_activation': 'linear',
+        #     'negative_slope': 0.025,
+        #     'batch_size': 512,
+        #     'lr': 1E-4,
+        #     'kl_weight': .1,
+        #     'temperature': .8
+        # }
         config = {
-            'l1': 64,
-            'l2': 32,
+            'hidden_channels': [16, 32, 64],
+            'strides': [3, 3, 3],
+            'kernel_sizes': [5, 5, 5],
             'latent_dim': 16,
+            'input_channels': 1,
             'activation': 'lrelu',
             'latent_activation': 'linear',
             'negative_slope': 0.025,
             'batch_size': 512,
             'lr': 1E-4,
-            'kl_weight': .1
+            'kl_weight': 1.,
+            'temperature': .5
         }
         training_parameters = {
             'dataset_id': DATASET_ID,
