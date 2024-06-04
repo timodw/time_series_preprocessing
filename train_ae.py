@@ -27,8 +27,8 @@ MODEL = 'convcae'
 
 DATA_ROOT = Path('/home/timodw/IDLab/time_series_preprocessing/processed_data')
 # DATA_ROOT = Path('/Users/timodewaele/Developer/IDLab/time_series_preprocessing/processed_data')
-# DATASET_ID = 'RTAGXFQJ4T' # With FFT
-DATASET_ID = 'K6WZL7BWHQ' # Standard
+DATASET_ID = 'RTAGXFQJ4T' # With FFT
+# DATASET_ID = 'K6WZL7BWHQ' # Standard
 
 
 def train_autoencoder(config, verbose=False, ray_tune=True, checkpoint_folder=None):
@@ -63,7 +63,7 @@ def train_autoencoder(config, verbose=False, ray_tune=True, checkpoint_folder=No
     else:
         model = Autoencoder
 
-    autoencoder = model(**config).to(DEVICE)
+    autoencoder = model(input_dim=train_tensor.size(1), **config).to(DEVICE)
 
     if MODEL == 'vae':
         criterion = partial(vae_loss, kl_weight=config['kl_weight'])
@@ -71,7 +71,7 @@ def train_autoencoder(config, verbose=False, ray_tune=True, checkpoint_folder=No
         criterion = partial(gumbel_elbo_loss, kl_weight=config['kl_weight'])
     else:
         criterion = torch.nn.MSELoss()
-    optimizer = torch.optim.Adam(autoencoder.parameters(), lr=config['lr'])
+    optimizer = torch.optim.Adam(autoencoder.parameters(), lr=config['lr'], weight_decay=config['weight_decay'])
 
     if ray_tune:
         checkpoint = ray.train.get_checkpoint()
@@ -159,30 +159,33 @@ if __name__ == '__main__':
     
     if not args.tune:
         # config = {
-        #     'l1': 64,
-        #     'l2': 32,
-        #     'latent_dim': 16,
+        #     'hidden_dims': [512, 128, 64],
+        #     'latent_dim': 32,
         #     'activation': 'lrelu',
-        #     'latent_activation': 'linear',
         #     'negative_slope': 0.025,
         #     'batch_size': 512,
         #     'lr': 1E-4,
-        #     'kl_weight': .1,
-        #     'temperature': .8
+        #     'kl_weight': 1E-2,
+        #     'temperature': .5,
+        #     'dropout': .0,
+        #     'weight_decay': .0
         # }
         config = {
-            'hidden_channels': [16, 32, 64],
-            'strides': [3, 3, 3],
-            'kernel_sizes': [5, 5, 5],
-            'latent_dim': 16,
+            'hidden_size': 512,
+            'hidden_channels': [8, 16, 32],
+            'strides': [1, 2, 4],
+            'kernel_sizes': [2, 4, 6],
+            'decoder_output_padding': [0, 1, 0],
+            'conv_output': 768,
+            'latent_dim': 32,
             'input_channels': 1,
             'activation': 'lrelu',
-            'latent_activation': 'linear',
             'negative_slope': 0.025,
-            'batch_size': 512,
+            'batch_size': 64,
             'lr': 1E-4,
-            'kl_weight': 1.,
-            'temperature': .5
+            'kl_weight': 1E-3,
+            'temperature': .5,
+            'weight_decay': 0.
         }
         training_parameters = {
             'dataset_id': DATASET_ID,
@@ -196,6 +199,7 @@ if __name__ == '__main__':
         print(f"Training model configuration {config_hash}")
 
         train_autoencoder(config, verbose=True, ray_tune=False, checkpoint_folder=output_folder)
+        print(f"Finnished training configuration {config_hash}")
     else:
         search_space = {
             "l1": tune.choice([64, 128, 256]),

@@ -17,7 +17,7 @@ from numpy.typing import NDArray
 
 MOVEMENTS = ('standing', 'walking', 'trotting', 'galloping')
 LABEL_MAPPING = {l: i for i, l in enumerate(MOVEMENTS)}
-DATA_ROOT = Path('datasets/HorsingAround/csv')
+DATA_ROOT = Path('datasets/HorsingAround/data/csv')
 PROCESSED_DATA_ROOT = Path('processed_data')
 SAMPLING_RATE = 100
 
@@ -29,7 +29,7 @@ STANDARDIZE = False
 NORMALIZE = False
 FFT_FILTER_CUTOFF = None
 RESAMPLING = None
-FFT_WINDOWS = False
+FFT_WINDOWS = True
 WINDOW_NORMALIZATION = False
 
 
@@ -104,7 +104,7 @@ def resample_time_series(X, new_sampling_rate, original_sampling_rate):
 
 
 def fft_time_series(X):
-    X_fft = fft(X)
+    X_fft = fft(X, axis=0)
     X_fft[0] = 0.
     return np.abs(X_fft)[:len(X) // 2]
 
