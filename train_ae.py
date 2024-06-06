@@ -23,7 +23,7 @@ from data import get_training_and_validation_data
 
 DEVICE = 'cuda' if torch.cuda.is_available() else 'cpu'
 NUM_EPOCHS = 200
-MODEL = 'convcae'
+MODEL = 'ae'
 
 DATA_ROOT = Path('/home/timodw/IDLab/time_series_preprocessing/processed_data')
 # DATA_ROOT = Path('/Users/timodewaele/Developer/IDLab/time_series_preprocessing/processed_data')
@@ -64,6 +64,7 @@ def train_autoencoder(config, verbose=False, ray_tune=True, checkpoint_folder=No
         model = Autoencoder
 
     autoencoder = model(input_dim=train_tensor.size(1), **config).to(DEVICE)
+    print(autoencoder)
 
     if MODEL == 'vae':
         criterion = partial(vae_loss, kl_weight=config['kl_weight'])
@@ -158,35 +159,36 @@ if __name__ == '__main__':
     args = parser.parse_args()
     
     if not args.tune:
+        config = {
+            'hidden_dims': [512, 128, 64],
+            'latent_dim': 16,
+            'activation': 'lrelu',
+            'latent_activation': 'linear',
+            'negative_slope': 0.025,
+            'batch_size': 512,
+            'lr': 1E-4,
+            # 'kl_weight': 2E-3,
+            # 'temperature': .5,
+            # 'dropout': .0,
+            'weight_decay': .0
+        }
         # config = {
-        #     'hidden_dims': [512, 128, 64],
+        #     'hidden_size': 512,
+        #     'hidden_channels': [8, 16, 32],
+        #     'strides': [1, 2, 4],
+        #     'kernel_sizes': [2, 4, 6],
+        #     'decoder_output_padding': [0, 1, 0],
+        #     'conv_output': 768,
         #     'latent_dim': 32,
+        #     'input_channels': 1,
         #     'activation': 'lrelu',
         #     'negative_slope': 0.025,
-        #     'batch_size': 512,
+        #     'batch_size': 64,
         #     'lr': 1E-4,
-        #     'kl_weight': 1E-2,
+        #     'kl_weight': 1E-3,
         #     'temperature': .5,
-        #     'dropout': .0,
-        #     'weight_decay': .0
+        #     'weight_decay': 0.
         # }
-        config = {
-            'hidden_size': 512,
-            'hidden_channels': [8, 16, 32],
-            'strides': [1, 2, 4],
-            'kernel_sizes': [2, 4, 6],
-            'decoder_output_padding': [0, 1, 0],
-            'conv_output': 768,
-            'latent_dim': 32,
-            'input_channels': 1,
-            'activation': 'lrelu',
-            'negative_slope': 0.025,
-            'batch_size': 64,
-            'lr': 1E-4,
-            'kl_weight': 1E-3,
-            'temperature': .5,
-            'weight_decay': 0.
-        }
         training_parameters = {
             'dataset_id': DATASET_ID,
             'model': MODEL

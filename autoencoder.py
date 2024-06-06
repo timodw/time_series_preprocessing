@@ -1,7 +1,8 @@
 import torch
 
 class Autoencoder(torch.nn.Module):
-    def __init__(self, input_dim, hidden_dims, latent_dim, activation='lrelu', latent_activation='lrelu', negative_slope=0.01):
+    def __init__(self, input_dim, hidden_dims, latent_dim, activation='lrelu',
+                 latent_activation='lrelu', negative_slope=0.01, **kwargs):
         super(Autoencoder, self).__init__()
         
         self.activation = self._get_activation_function(activation, negative_slope)
@@ -37,8 +38,16 @@ class Autoencoder(torch.nn.Module):
             return torch.nn.Tanh()
         elif activation == 'linear':
             return torch.nn.Identity()
+        elif activation == 'softmax':
+            return torch.nn.Softmax()
         else:
             raise ValueError(f"Unsupported activation function: {activation}")
+            
+    def encode(self, x):
+        return self.encoder(x)
+    
+    def decode(self, z):
+        return self.decoder(z)
 
     def forward(self, x):
         encoded = self.encoder(x)
@@ -53,7 +62,8 @@ def vae_loss(recon_x, x, mu, logvar, kl_weight=1E-3):
 
 
 class VariationalAutoencoder(torch.nn.Module):
-    def __init__(self, input_dim, hidden_dims, latent_dim, activation='lrelu', latent_activation='lrelu', negative_slope=0.01):
+    def __init__(self, input_dim, hidden_dims, latent_dim, activation='lrelu',
+                 latent_activation='lrelu', negative_slope=0.01, **kwargs):
         super(VariationalAutoencoder, self).__init__()
         
         self.activation = self._get_activation_function(activation, negative_slope)

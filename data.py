@@ -7,6 +7,7 @@ from base64 import b32encode
 from time import time
 from sklearn.model_selection import train_test_split
 from imblearn.under_sampling import RandomUnderSampler
+from imblearn.over_sampling import SMOTE
 from itertools import combinations
 import numpy as np
 from numpy.fft import fft, fftfreq, ifft
@@ -247,7 +248,8 @@ def get_training_and_validation_data(data_root: Path, dataset_id: str, balanced=
     X_train = np.concatenate([X[i] for i in train_indices])[:, :, 0]
     y_train = np.concatenate([y[i] for i in train_indices])
     if balanced:
-        sampler = RandomUnderSampler()
+        # sampler = RandomUnderSampler()
+        sampler = SMOTE()
         X_train, y_train = sampler.fit_resample(X_train, y_train)
     X_val = np.concatenate([X[i] for i in val_indices])[:, :, 0]
     y_val = np.concatenate([y[i] for i in val_indices])
