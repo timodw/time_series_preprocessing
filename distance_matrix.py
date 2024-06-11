@@ -1,5 +1,6 @@
 from numba import njit
 from multiprocessing import Pool
+from scipy.spatial.distance import euclidean
 import numpy as np
 import ctypes
 libdtw = ctypes.CDLL('./libdtw.so')
@@ -32,18 +33,22 @@ def dtw_njit(s1, s2):
 
 
 def compute_row(args):
-    i, X, n = args
+    i, X, n, metric = args
+    if metric == 'dtw':
+        distance_fn = dtw_c
+    else:
+        distance_fn = euclidean
     distances = np.zeros(n)
     for j in range(i, n):
-        distances[j] = dtw_c(X[i], X[j])
+        distances[j] = distance_fn(X[i], X[j])
     return i, distances
 
 
-def parallel_distance_matrix(X):
+def parallel_distance_matrix(X, metric='dtw'):
     n = len(X)
     distance_matrix = np.zeros((n, n))
     
-    args = [(i, X, n) for i in range(n)]
+    args = [(i, X, n, metric) for i in range(n)]
     
     with Pool() as pool:
         results = pool.map(compute_row, args)
