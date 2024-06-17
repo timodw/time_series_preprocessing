@@ -27,12 +27,16 @@ MODEL = 'ae'
 
 DATA_ROOT = Path('/home/timodw/IDLab/time_series_preprocessing/processed_data')
 # DATA_ROOT = Path('/Users/timodewaele/Developer/IDLab/time_series_preprocessing/processed_data')
-DATASET_ID = 'RTAGXFQJ4T' # With FFT
-# DATASET_ID = 'K6WZL7BWHQ' # Standard
+# DATASET_ID = 'RTAGXFQJ4T' # With FFT
+DATASET_ID = 'K6WZL7BWHQ' # Standard
 
 
 def train_autoencoder(config, verbose=False, ray_tune=True, checkpoint_folder=None):
-    X_train, _, X_val, _ = get_training_and_validation_data(DATA_ROOT, DATASET_ID, balanced=True)
+    if 'classes' in config:
+        classes = config['classes']
+    else:
+        classes = None
+    X_train, _, X_val, _ = get_training_and_validation_data(DATA_ROOT, DATASET_ID, classes=classes, balanced=True)
 
     # X_mean, X_std = X_train.mean(), X_train.std()
     # X_train -= X_mean
@@ -167,6 +171,7 @@ if __name__ == '__main__':
             'negative_slope': 0.025,
             'batch_size': 512,
             'lr': 1E-4,
+            'classes': [1, 2, 3],
             # 'kl_weight': 2E-3,
             # 'temperature': .5,
             # 'dropout': .0,

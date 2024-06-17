@@ -11,6 +11,7 @@ from imblearn.over_sampling import SMOTE
 from itertools import combinations
 import numpy as np
 from numpy.fft import fft, fftfreq, ifft
+import tsfel
 
 from typing import Optional, List, Tuple, Dict
 from numpy.typing import NDArray
@@ -30,7 +31,7 @@ STANDARDIZE = False
 NORMALIZE = False
 FFT_FILTER_CUTOFF = None
 RESAMPLING = None
-FFT_WINDOWS = True
+FFT_WINDOWS = False
 WINDOW_NORMALIZATION = False
 
 
@@ -202,20 +203,30 @@ def process_horse_data(dataframes: List[pd.DataFrame], movements: List[str],
     return np.concatenate(X_windows), np.concatenate(y_windows)
 
 
+def calculate_features(X: NDArray, sampling_rate: int) -> NDArray:
+    features_dict = tsfel.get_features_by_domain()
+    X_feat = tsfel.time_series_features_extractor(features_dict, np.concatenate(X), fs=sampling_rate, window_size=X.shape[1])
+    return X_feat
+
+
 def load_dataset(root_folder: Path, dataset_id: str) -> Tuple[List[NDArray], List[NDArray]]:
     X_list = []
+    X_feat_list = []
     y_list = []
 
     folder_path = root_folder / dataset_id
-    for X_path in folder_path.glob('X_*.npy'):
-        horse_name = X_path.stem[2:]
-        y_path = folder_path / f'y_{horse_name}.npy'
+    for y_path in folder_path.glob('y_*.npy'):
+        horse_name = y_path.stem[2:]
+        X_path = folder_path / f'X_{horse_name}.npy'
+        X_feat_path = folder_path / f'X_feat_{horse_name}.npy'
         X = np.load(X_path)
+        X_feat = np.load(X_feat_path)
         y = np.load(y_path)
         X_list.append(X)
+        X_feat_list.append(X_feat)
         y_list.append(y)
 
-    return X_list, y_list
+    return X_list, X_feat_list, y_list
 
 
 def get_stratified_split(y_list: List[NDArray]) -> Tuple[List[int], List[int]]:
@@ -242,19 +253,29 @@ def get_stratified_split(y_list: List[NDArray]) -> Tuple[List[int], List[int]]:
     return best_split
 
 
-def get_training_and_validation_data(data_root: Path, dataset_id: str, balanced=False) -> Tuple[NDArray, NDArray, NDArray, NDArray]:
-    X, y = load_dataset(data_root, dataset_id)
+def get_training_and_validation_data(data_root: Path, dataset_id: str, classes: Optional[List], balanced=False) -> Tuple[NDArray, NDArray, NDArray, NDArray]:
+    X, X_feat, y = load_dataset(data_root, dataset_id)
     train_indices, val_indices = get_stratified_split(y)
     X_train = np.concatenate([X[i] for i in train_indices])[:, :, 0]
+    X_feat_train = np.concatenate([X_feat[i] for i in train_indices])
     y_train = np.concatenate([y[i] for i in train_indices])
+    if classes is not None:
+        X_train = X_train[np.isin(y_train, classes)]
+        X_feat_train = X_feat_train[np.isin(y_train, classes)]
+        y_train = y_train[np.isin(y_train, classes)]
     if balanced:
         # sampler = RandomUnderSampler()
         sampler = SMOTE()
         X_train, y_train = sampler.fit_resample(X_train, y_train)
     X_val = np.concatenate([X[i] for i in val_indices])[:, :, 0]
+    X_feat_val = np.concatenate([X_feat[i] for i in val_indices])
     y_val = np.concatenate([y[i] for i in val_indices])
+    if classes is not None:
+        X_val = X_val[np.isin(y_val, classes)]
+        X_feat_val = X_feat_val[np.isin(y_val, classes)]
+        y_val = y_val[np.isin(y_val, classes)]
 
-    return X_train, y_train, X_val, y_val
+    return X_train, X_feat_train, y_train, X_val, X_feat_val, y_val
 
 
 if __name__ == '__main__':
@@ -281,7 +302,7 @@ if __name__ == '__main__':
     horses = get_horses_of_interest(DATA_ROOT, MOVEMENTS)
     horses_dataframes = defaultdict(list)
     for horse in horses:
-        print(horse, end='', flush=True)
+        print(horse, flush=True)
         t0 = time()
         dataframes = get_horse_dataframes(DATA_ROOT, horse)
         X, y = process_horse_data(dataframes, movements=MOVEMENTS, label_mapping=LABEL_MAPPING,
@@ -289,6 +310,8 @@ if __name__ == '__main__':
                                   standardize=STANDARDIZE, normalize=NORMALIZE, fft_filter_cutoff=FFT_FILTER_CUTOFF,
                                   window_size=WINDOW_SIZE, step_size=WINDOW_SIZE // 2,
                                   resampling=RESAMPLING, fft_windows=FFT_WINDOWS, window_normalization=WINDOW_NORMALIZATION)
+        X_feat = calculate_features(X, sampling_rate=SAMPLING_RATE)
         np.save(output_folder / f"X_{horse.lower()}.npy", X)
+        np.save(output_folder / f"X_feat_{horse.lower()}.npy", X_feat)
         np.save(output_folder / f"y_{horse.lower()}.npy", y)
         print(f"; {y.shape[0]} windows; {time() - t0:.02f}s")
