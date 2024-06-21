@@ -209,6 +209,17 @@ def calculate_features(X: NDArray, sampling_rate: int) -> NDArray:
     return X_feat
 
 
+def load_distance_matrices(root_folder: Path, dataset_id: str) -> List[NDArray]:
+    distance_matrices = []
+
+    folder_path = root_folder / dataset_id
+    for i, _ in enumerate(folder_path.glob('y_*.npy')): # Iterate in same order as load dataset
+        dm = np.load(folder_path / f"distances_{i}.npy")
+        distance_matrices.append(dm)
+
+    return distance_matrices
+
+
 def load_dataset(root_folder: Path, dataset_id: str) -> Tuple[List[NDArray], List[NDArray]]:
     X_list = []
     X_feat_list = []

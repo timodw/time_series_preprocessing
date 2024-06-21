@@ -1,7 +1,13 @@
 from numba import njit
 from multiprocessing import Pool
 from scipy.spatial.distance import euclidean
+from pathlib import Path
 import numpy as np
+from time import time
+import gc
+
+from data import load_dataset
+
 import ctypes
 libdtw = ctypes.CDLL('./libdtw.so')
 
@@ -58,3 +64,29 @@ def parallel_distance_matrix(X, metric='dtw'):
         distance_matrix[:, i][i:] = distances[i:]
 
     return distance_matrix
+
+
+if __name__ == '__main__':
+    root_path = Path('processed_data')
+    dataset_id = 'K6WZL7BWHQ' # raw
+    X, _, _ = load_dataset(root_path, dataset_id=dataset_id)
+    for i, X_horse in enumerate(X):
+        print(f"Processing horse {i + 1}/{len(X)} -> ", end='', flush=True)
+        ts = time()
+        X_horse = X_horse[:, :, 0]
+        X_min, X_max = X_horse.min(), X_horse.max()
+        X_horse -= X_min
+        X_horse /= (X_max - X_min)
+        distances = parallel_distance_matrix(X_horse)
+        sums = distances.sum(axis=1)
+        distances = distances / sums[:, np.newaxis]
+        te = time()
+        np.save(root_path / dataset_id / f"distances_{i}.npy", distances)
+        del distances
+        gc.collect()
+
+        tt = te - ts
+        minutes = int(tt / 60)
+        seconds = tt - 60 * minutes
+        print(f"{minutes} minutes, {seconds:.02f} seconds")
+
