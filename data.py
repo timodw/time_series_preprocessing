@@ -13,6 +13,8 @@ import numpy as np
 from numpy.fft import fft, fftfreq, ifft
 import tsfel
 
+from utils import dataset_augmentation_using_distances
+
 from typing import Optional, List, Tuple, Dict
 from numpy.typing import NDArray
 
@@ -264,29 +266,59 @@ def get_stratified_split(y_list: List[NDArray]) -> Tuple[List[int], List[int]]:
     return best_split
 
 
-def get_training_and_validation_data(data_root: Path, dataset_id: str, classes: Optional[List], balanced=False) -> Tuple[NDArray, NDArray, NDArray, NDArray]:
+def get_training_and_validation_data(data_root: Path, dataset_id: str, classes: Optional[List],
+                                     balanced=False, augmentation=False) -> Tuple[NDArray, NDArray, NDArray, NDArray]:
     X, X_feat, y = load_dataset(data_root, dataset_id)
+    if augmentation:
+        distances = load_distance_matrices(data_root, dataset_id)
+    for i in range(len(X)):
+        X[i] = X[i][:, :, 0]
+        X_min, X_max = X[i].min(), X[i].max()
+        X[i] -= X_min
+        X[i] /= (X_max - X_min)
+
+        if classes is not None:
+            indices = np.isin(y[i], classes)
+            X[i] = X[i][indices]
+            X_feat[i] = X_feat[i][indices]
+            y[i] = y[i][indices]
+            if augmentation:
+                distances[i] = distances[i][indices, :]
+                distances[i] = distances[i][:, indices]
+
     train_indices, val_indices = get_stratified_split(y)
-    X_train = np.concatenate([X[i] for i in train_indices])[:, :, 0]
+    X_train = np.concatenate([X[i] for i in train_indices])
     X_feat_train = np.concatenate([X_feat[i] for i in train_indices])
     y_train = np.concatenate([y[i] for i in train_indices])
+
+    X_val = np.concatenate([X[i] for i in val_indices])
+    X_feat_val = np.concatenate([X_feat[i] for i in val_indices])
+    y_val = np.concatenate([y[i] for i in val_indices])
+
     if classes is not None:
         X_train = X_train[np.isin(y_train, classes)]
         X_feat_train = X_feat_train[np.isin(y_train, classes)]
         y_train = y_train[np.isin(y_train, classes)]
-    if balanced:
-        # sampler = RandomUnderSampler()
-        sampler = SMOTE()
-        X_train, y_train = sampler.fit_resample(X_train, y_train)
-    X_val = np.concatenate([X[i] for i in val_indices])[:, :, 0]
-    X_feat_val = np.concatenate([X_feat[i] for i in val_indices])
-    y_val = np.concatenate([y[i] for i in val_indices])
     if classes is not None:
         X_val = X_val[np.isin(y_val, classes)]
         X_feat_val = X_feat_val[np.isin(y_val, classes)]
         y_val = y_val[np.isin(y_val, classes)]
+    if balanced:
+        # sampler = RandomUnderSampler()
+        sampler = SMOTE()
+        X_train, y_train = sampler.fit_resample(X_train, y_train)
+    elif augmentation:
+        X_train_aug = []
+        for i in train_indices:
+            X_train_aug.append(dataset_augmentation_using_distances(X[i], distances=distances[i]))
+        X_train_aug = np.concatenate(X_train_aug)
 
-    return X_train, X_feat_train, y_train, X_val, X_feat_val, y_val
+
+
+    if not augmentation:
+        return X_train, X_feat_train, y_train, X_val, X_feat_val, y_val
+    else:
+        return (X_train, X_feat_train, y_train, X_val, X_feat_val, y_val), X_train_aug
 
 
 if __name__ == '__main__':

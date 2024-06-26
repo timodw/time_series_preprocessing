@@ -36,27 +36,24 @@ def train_autoencoder(config, verbose=False, ray_tune=True, checkpoint_folder=No
         classes = config['classes']
     else:
         classes = None
-    X_train, _, X_val, _ = get_training_and_validation_data(DATA_ROOT, DATASET_ID, classes=classes, balanced=True)
-
-    # X_mean, X_std = X_train.mean(), X_train.std()
-    # X_train -= X_mean
-    # X_train /= X_std
-    # X_val -= X_mean
-    # X_val /= X_std
-
-    X_min, X_max = X_train.min(), X_train.max()
-    X_train -= X_min
-    X_train /= (X_max - X_min)
-    X_val -= X_min
-    X_val /= (X_max - X_min)
+    if config['with_augmentation']:
+        (X_train, _, _, X_val, _, _), X_train_aug = get_training_and_validation_data(DATA_ROOT, DATASET_ID, classes=classes,
+                                                                    balanced=False, augmentation=True)
+    else:
+        X_train, _, _, X_val, _, _ = get_training_and_validation_data(DATA_ROOT, DATASET_ID, classes=classes,
+                                                                    balanced=False, augmentation=False)
     
     batch_size = config['batch_size']
-    train_tensor = torch.tensor(X_train, dtype=torch.float32).squeeze()
+    if config['with_augmentation']:
+        train_tensor = torch.tensor(X_train_aug, dtype=torch.float32).squeeze()
+    else:
+        train_tensor = torch.tensor(X_train, dtype=torch.float32).squeeze()
     val_tensor = torch.tensor(X_val, dtype=torch.float32).squeeze()
     train_dataset = TensorDataset(train_tensor)
     val_dataset = TensorDataset(val_tensor)
     train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
     val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False)
+    print('Training dataset size: ', len(train_tensor))
     
     if MODEL == 'vae':
         model = VariationalAutoencoder
@@ -175,7 +172,8 @@ if __name__ == '__main__':
             # 'kl_weight': 2E-3,
             # 'temperature': .5,
             # 'dropout': .0,
-            'weight_decay': .0
+            'weight_decay': .0,
+            'with_augmentation': True
         }
         # config = {
         #     'hidden_size': 512,
